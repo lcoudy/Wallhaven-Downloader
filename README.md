@@ -32,6 +32,8 @@ uv sync
 uv run python index-withUI.py
 ```
 
+UI 中可点击“桌面Wallhaven”按钮，自动将下载目录设置为桌面上的 `Wallhaven` 文件夹。
+
 无界面版本暂时保留为下载逻辑测试入口：
 
 ```powershell

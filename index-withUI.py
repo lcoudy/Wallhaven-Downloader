@@ -1,4 +1,5 @@
 import sys
+from pathlib import Path
 from PyQt5 import QtCore, QtGui, QtWidgets
 from PyQt5.QtWidgets import QMessageBox, QFileDialog
 
@@ -47,7 +48,7 @@ class Ui_Form(object):
         Form.resize(794, 497)
         self.mesb = QMessageBox
         # 类型动漫。。
-        self.mark = [1, 1, 0]
+        self.mark = [1, 1, 1]
         # SFW
         self.mark_2 = [1, 1, 0]
         self.file = ''
@@ -55,7 +56,7 @@ class Ui_Form(object):
         # date_added按时间
         self.sorting = 'toplist'
         self.topRange = '1M'
-        self.categories = '110'
+        self.categories = '111'
         self.purity = '110'
         font = QtGui.QFont()
         font.setPointSize(12)
@@ -64,12 +65,19 @@ class Ui_Form(object):
         self.Button_start.setFont(font)
         self.Button_start.setObjectName("Button_start")
         self.Button_start.clicked.connect(lambda: self.start(Form))
+        self.Button_start.setVisible(False)
 
         self.Button_choose_file = QtWidgets.QPushButton(Form)
         self.Button_choose_file.setGeometry(QtCore.QRect(320, 240, 121, 61))
         self.Button_choose_file.setFont(font)
         self.Button_choose_file.setObjectName("Button_choose_file")
         self.Button_choose_file.clicked.connect(lambda: self.get_filename(Form))
+
+        self.Button_desktop_folder = QtWidgets.QPushButton(Form)
+        self.Button_desktop_folder.setGeometry(QtCore.QRect(510, 50, 169, 61))
+        self.Button_desktop_folder.setFont(font)
+        self.Button_desktop_folder.setObjectName("Button_desktop_folder")
+        self.Button_desktop_folder.clicked.connect(lambda: self.use_desktop_folder(Form))
 
         # 按条件下载
         self.Button_condition_start = QtWidgets.QPushButton(Form)
@@ -81,15 +89,17 @@ class Ui_Form(object):
         self.Page_input.setGeometry(QtCore.QRect(220, 66, 231, 31))
         self.Page_input.setText("")
         self.Page_input.setObjectName("Page_input")
+        self.Page_input.setVisible(False)
 
         # 单张下载url
         self.Label_page = QtWidgets.QLabel(Form)
         self.Label_page.setGeometry(QtCore.QRect(20, 66, 181, 31))
         self.Label_page.setObjectName("Label_page")
+        self.Label_page.setVisible(False)
 
         # 录下载张数
         self.Label_down_nums = QtWidgets.QLabel(Form)
-        self.Label_down_nums.setGeometry(QtCore.QRect(510, 250, 171, 41))
+        self.Label_down_nums.setGeometry(QtCore.QRect(500, 240, 260, 61))
         self.Label_down_nums.setObjectName("Label_down_nums")
         font = QtGui.QFont()
         font.setFamily("Adobe Devanagari")
@@ -101,6 +111,7 @@ class Ui_Form(object):
         self.spinBox_nums_common.setMinimum(1)
         self.spinBox_nums_common.setMaximum(500)
         self.spinBox_nums_common.setObjectName("spinBox_nums_rmf")
+        self.spinBox_nums_common.setVisible(False)
 
         self.spinBox_start_num = QtWidgets.QSpinBox(Form)
         self.spinBox_start_num.setGeometry(QtCore.QRect(280, 430, 61, 31))
@@ -112,6 +123,7 @@ class Ui_Form(object):
         self.spinBox_nums_end.setGeometry(QtCore.QRect(450, 430, 61, 31))
         self.spinBox_nums_end.setMinimum(1)
         self.spinBox_nums_end.setMaximum(500)
+        self.spinBox_nums_end.setValue(20)
         self.spinBox_nums_end.setObjectName("spinBox_nums_end")
 
 
@@ -125,6 +137,7 @@ class Ui_Form(object):
         self.Label_nums = QtWidgets.QLabel(Form)
         self.Label_nums.setGeometry(QtCore.QRect(120, 130, 91, 21))
         self.Label_nums.setObjectName("Label_nums")
+        self.Label_nums.setVisible(False)
 
         self.comboBox_time = QtWidgets.QComboBox(Form)
         self.comboBox_time.setGeometry(QtCore.QRect(250, 360, 121, 31))
@@ -213,14 +226,15 @@ class Ui_Form(object):
 
     def retranslateUi(self, Form):
         _translate = QtCore.QCoreApplication.translate
-        Form.setWindowTitle(_translate("Form", "WallHaven壁纸批量下载 -- 吾爱发布 -- Lthero"))
+        Form.setWindowTitle(_translate("Form", "Wallhaven-Downloader"))
         self.Button_start.setText(_translate("Form", "开始从此页面下载"))
         self.Button_choose_file.setText(_translate("Form", "选择文件夹"))
+        self.Button_desktop_folder.setText(_translate("Form", "桌面Wallhaven"))
         self.Label_page.setText(_translate("Form", "输入wallhaven中的网址"))
         self.Label_nums.setText(_translate("Form", "下载页数"))
         self.set_down_nums()
         self.label_start_num.setText(_translate("Form", "起始页码"))
-        self.label_end_num.setText(_translate("Form", "终止页码"))
+        self.label_end_num.setText(_translate("Form", "下载页数"))
         self.comboBox_time.setCurrentText(_translate("Form", "近一个月的"))
         self.comboBox_time.setItemText(0, _translate("Form", "最新的"))
         self.comboBox_time.setItemText(1, _translate("Form", "近一个月的"))
@@ -240,14 +254,14 @@ class Ui_Form(object):
         self.checkBox_Sketchy.setText(_translate("Form", "Sketchy"))
         self.checkBox_SFW.setText(_translate("Form", "SFW"))
         self.checkBox_NSFW.setText(_translate("Form", "NSFW"))
-        self.Button_condition_start.setText(_translate("Form", "开始按条件下载"))
-        self.checkBox_general.setText(_translate("Form", "常规"))
-        self.checkBox_anime.setText(_translate("Form", "动漫"))
-        self.checkBox_people.setText(_translate("Form", "真人"))
+        self.Button_condition_start.setText(_translate("Form", "开始下载"))
+        self.checkBox_general.setText(_translate("Form", "General"))
+        self.checkBox_anime.setText(_translate("Form", "Anime"))
+        self.checkBox_people.setText(_translate("Form", "People"))
         # self.label.setText(_translate("Form", "输入指定网站可以从指定页面向后按 ！开始！ 下载，不输入指定网站按 ！开始条件下载 ！ \n\t\t\t 一次下载大约23张 \n\t\t 若长时间不下载，可以重新点击开始尝试"))
 
     def updateEndSpinBoxNum(self):
-        self.spinBox_nums_end.setMaximum(int(self.spinBox_start_num.text()) + 19)
+        self.spinBox_nums_end.setMaximum(500)
 
     def get_filename(self, form):
         self.file = QFileDialog.getExistingDirectory(form, "选择文件夹", ".")
@@ -255,6 +269,15 @@ class Ui_Form(object):
             self.mesb.about(form, '对不起！', '选择成功  ' + self.file)
         else:
             self.mesb.about(form, '对不起！', '选择失败  ')
+
+    def use_desktop_folder(self, form):
+        desktop = QtCore.QStandardPaths.writableLocation(QtCore.QStandardPaths.DesktopLocation)
+        if desktop == '':
+            desktop = str(Path.home() / 'Desktop')
+        target = Path(desktop) / 'Wallhaven'
+        target.mkdir(parents=True, exist_ok=True)
+        self.file = str(target)
+        self.mesb.about(form, '提示', '下载目录已设置为  ' + self.file)
 
     def downLoad(self,url,num,file_path,form):
         self.set_download_controls_enabled(False)
@@ -270,6 +293,7 @@ class Ui_Form(object):
         self.Button_condition_start.setEnabled(enabled)
         self.Button_start.setEnabled(enabled)
         self.Button_choose_file.setEnabled(enabled)
+        self.Button_desktop_folder.setEnabled(enabled)
 
     def on_download_progress(self, downloaded, skipped, failed):
         self.set_down_nums(f'已经下载 {downloaded} 张，跳过 {skipped} 张，失败 {failed} 张')
@@ -374,14 +398,8 @@ class Ui_Form(object):
                     categories=self.categories,
                     start_page=int(self.spinBox_start_num.text()),
                 )
-                if int(self.spinBox_nums_end.text()) - int(self.spinBox_start_num.text()) < 0:
-                    num = 1
-                else:
-                    num = int(self.spinBox_nums_end.text()) - int(self.spinBox_start_num.text()) + 1
-                if num>20:
-                    self.mesb.about(form, '对不起！', '一次性最多下载20页，过多容易导致程序异常')
-                else:
-                    self.downLoad(fixed_url,num,self.file,form)
+                num = int(self.spinBox_nums_end.text())
+                self.downLoad(fixed_url,num,self.file,form)
             except Exception as exc:
                 self.mesb.about(form, '错误', '出错：' + str(exc))
         else:
