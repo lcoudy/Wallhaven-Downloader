@@ -30,9 +30,10 @@ DEFAULT_HEADERS = {
 
 DEFAULT_PAGE_TIMEOUT = 20
 DEFAULT_DOWNLOAD_TIMEOUT = 30
-DEFAULT_RETRIES = 4
+DEFAULT_RETRIES = 6
 DEFAULT_RETRY_DELAY = 2.0
-DEFAULT_MAX_WORKERS = 4
+DEFAULT_MAX_WORKERS = 2
+DEFAULT_FAILED_RETRY_ROUNDS = 1
 RETRY_STATUS_CODES = {429, 500, 502, 503, 504}
 
 
@@ -208,6 +209,8 @@ def download_wallpapers(
     max_workers: int = DEFAULT_MAX_WORKERS,
     overwrite: bool = False,
     progress_callback: ProgressCallback | None = None,
+    failed_retry_rounds: int = DEFAULT_FAILED_RETRY_ROUNDS,
+    write_failure_report_file: bool = True,
 ) -> list[DownloadResult]:
     headers = build_headers()
     links = fetch_wallpaper_links(url, page_count, headers=headers)
@@ -228,14 +231,33 @@ def download_wallpapers(
             return download_image(png_url, wallpaper_id, output_dir, headers=headers, overwrite=overwrite)
         return result
 
-    results: list[DownloadResult] = []
+    results_by_id: dict[str, DownloadResult] = {}
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         futures = [executor.submit(download_one, link) for link in links]
         for future in as_completed(futures):
             result = future.result()
-            results.append(result)
+            results_by_id[result.wallpaper_id] = result
             if progress_callback is not None:
                 progress_callback(result)
+
+    for _ in range(failed_retry_rounds):
+        failed_links = [
+            link for link in links
+            if (results_by_id.get(wallpaper_id_from_url(link)) is not None
+                and results_by_id[wallpaper_id_from_url(link)].error is not None)
+        ]
+        if not failed_links:
+            break
+        time.sleep(DEFAULT_RETRY_DELAY * 2)
+        for link in failed_links:
+            result = download_one(link)
+            results_by_id[result.wallpaper_id] = result
+            if progress_callback is not None:
+                progress_callback(result)
+
+    results = [results_by_id[wallpaper_id_from_url(link)] for link in links if wallpaper_id_from_url(link) in results_by_id]
+    if write_failure_report_file:
+        write_failure_report(output_dir, results)
     return results
 
 
@@ -290,6 +312,21 @@ def request_with_retries(
     if last_error is not None:
         raise last_error
     raise RuntimeError(f"Request failed after {retries + 1} attempts: {url}")
+
+
+def write_failure_report(output_dir: str | Path, results: Iterable[DownloadResult]) -> Path | None:
+    failed = [item for item in results if item.error is not None]
+    if not failed:
+        return None
+
+    target_dir = Path(output_dir)
+    target_dir.mkdir(parents=True, exist_ok=True)
+    report_path = target_dir / "download_failures.txt"
+    lines = ["wallpaper_id\turl\terror"]
+    for item in failed:
+        lines.append(f"{item.wallpaper_id}\t{item.url}\t{item.error}")
+    report_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return report_path
 
 
 def dedupe(values: Iterable[str]) -> list[str]:

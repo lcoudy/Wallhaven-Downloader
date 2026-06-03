@@ -22,13 +22,16 @@ class DownloadWorker(QtCore.QThread):
 
     def run(self):
         try:
-            download_wallpapers(
+            results = download_wallpapers(
                 self.url,
                 self.page_count,
                 self.output_dir,
                 progress_callback=self.on_progress,
             )
-            self.finished.emit(self.downloaded, self.skipped, self.errors)
+            downloaded = sum(1 for item in results if not item.skipped and item.error is None)
+            skipped = sum(1 for item in results if item.skipped)
+            errors = sum(1 for item in results if item.error is not None)
+            self.finished.emit(downloaded, skipped, errors)
         except Exception as exc:
             self.failed.emit(str(exc))
 
@@ -94,8 +97,7 @@ class Ui_Form(object):
         self.general_checkbox = QtWidgets.QCheckBox("General", Form)
         self.anime_checkbox = QtWidgets.QCheckBox("Anime", Form)
         self.people_checkbox = QtWidgets.QCheckBox("People", Form)
-        for checkbox in (self.general_checkbox, self.anime_checkbox, self.people_checkbox):
-            checkbox.setChecked(True)
+        self.general_checkbox.setChecked(True)
 
         self.sfw_checkbox = QtWidgets.QCheckBox("SFW", Form)
         self.sketchy_checkbox = QtWidgets.QCheckBox("Sketchy", Form)
@@ -249,6 +251,12 @@ class Ui_Form(object):
     def on_download_finished(self, downloaded, skipped, failed):
         self.set_download_controls_enabled(True)
         self.progress_label.setText(f"下载完成：成功 {downloaded} 张，跳过 {skipped} 张，失败 {failed} 张")
+        if failed:
+            QtWidgets.QMessageBox.warning(
+                self.form,
+                "提示",
+                "部分图片下载失败，详情已写入下载目录中的 download_failures.txt",
+            )
 
     def on_download_failed(self, message):
         self.set_download_controls_enabled(True)

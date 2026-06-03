@@ -1,3 +1,4 @@
+import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import Mock, patch
@@ -11,6 +12,7 @@ from wallhaven_downloader.core import (
     iter_page_urls,
     request_with_retries,
     wallpaper_id_from_url,
+    write_failure_report,
 )
 
 
@@ -125,6 +127,53 @@ class CoreTest(unittest.TestCase):
 
         self.assertEqual(results[0].url, png_url)
         self.assertEqual(download_image.call_count, 2)
+
+    def test_download_wallpapers_retries_final_failures(self):
+        jpg_url = "https://w.wallhaven.cc/full/ab/wallhaven-abc123.jpg"
+
+        with (
+            patch("wallhaven_downloader.core.fetch_wallpaper_links", return_value=["https://wallhaven.cc/w/abc123"]),
+            patch("wallhaven_downloader.core.resolve_image_url", return_value=jpg_url),
+            patch("wallhaven_downloader.core.time.sleep"),
+            patch(
+                "wallhaven_downloader.core.download_image",
+                side_effect=[
+                    DownloadResult("abc123", jpg_url, Path("abc123.jpg"), error="429 Client Error"),
+                    DownloadResult("abc123", jpg_url, Path("abc123.jpg")),
+                ],
+            ) as download_image,
+        ):
+            results = download_wallpapers(
+                "https://wallhaven.cc/hot",
+                1,
+                ".",
+                max_workers=1,
+                failed_retry_rounds=1,
+                write_failure_report_file=False,
+            )
+
+        self.assertIsNone(results[0].error)
+        self.assertEqual(download_image.call_count, 2)
+
+    def test_write_failure_report(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            report_path = write_failure_report(
+                temp_dir,
+                [
+                    DownloadResult(
+                        "abc123",
+                        "https://example.test/wallhaven-abc123.jpg",
+                        Path("abc123.jpg"),
+                        error="429 Client Error",
+                    )
+                ],
+            )
+
+            self.assertIsNotNone(report_path)
+            content = report_path.read_text(encoding="utf-8")
+
+        self.assertIn("abc123", content)
+        self.assertIn("429 Client Error", content)
 
 
 if __name__ == "__main__":

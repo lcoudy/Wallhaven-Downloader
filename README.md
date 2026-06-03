@@ -33,6 +33,8 @@ uv run python index-withUI.py
 ```
 
 UI 中可点击“桌面Wallhaven”按钮，自动将下载目录设置为桌面上的 `Wallhaven` 文件夹。
+UI 默认只启用 `General` 和 `SFW`，更适合日常浏览场景。
+如果仍有图片下载失败，失败详情会写入下载目录中的 `download_failures.txt`。
 
 无界面版本暂时保留为下载逻辑测试入口：
 
