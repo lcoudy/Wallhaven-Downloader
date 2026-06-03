@@ -38,6 +38,13 @@ uv run python index-withUI.py
 uv run python index-withoutUI.py
 ```
 
+也可以使用新的命令行入口：
+
+```powershell
+uv run python -m wallhaven_downloader --url https://wallhaven.cc/hot -o downloads --pages 3
+uv run python -m wallhaven_downloader -o downloads --sorting toplist --top-range 1M --pages 3
+```
+
 运行核心逻辑测试：
 
 ```powershell

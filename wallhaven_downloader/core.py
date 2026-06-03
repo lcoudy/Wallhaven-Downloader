@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 import os
+import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable
+from typing import Callable, Iterable
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 import requests
@@ -27,6 +28,11 @@ DEFAULT_HEADERS = {
     ),
 }
 
+DEFAULT_PAGE_TIMEOUT = 20
+DEFAULT_DOWNLOAD_TIMEOUT = 30
+DEFAULT_RETRIES = 2
+RETRY_STATUS_CODES = {429, 500, 502, 503, 504}
+
 
 @dataclass(frozen=True)
 class DownloadResult:
@@ -35,6 +41,9 @@ class DownloadResult:
     path: Path
     skipped: bool = False
     error: str | None = None
+
+
+ProgressCallback = Callable[[DownloadResult], None]
 
 
 def build_headers() -> dict[str, str]:
@@ -120,7 +129,13 @@ def image_url_for(wallpaper_id: str, extension: str = "jpg") -> str:
 def resolve_image_url(session: requests.Session, wallpaper_id: str, timeout: float = 15) -> str:
     jpg_url = image_url_for(wallpaper_id, "jpg")
     try:
-        response = session.head(jpg_url, timeout=timeout, allow_redirects=True)
+        response = request_with_retries(
+            session,
+            "HEAD",
+            jpg_url,
+            timeout=timeout,
+            allow_redirects=True,
+        )
     except requests.RequestException:
         return jpg_url
 
@@ -133,14 +148,15 @@ def fetch_wallpaper_links(
     url: str,
     page_count: int,
     headers: dict[str, str] | None = None,
-    timeout: float = 20,
+    timeout: float = DEFAULT_PAGE_TIMEOUT,
+    retries: int = DEFAULT_RETRIES,
 ) -> list[str]:
     session = requests.Session()
     session.headers.update(headers or build_headers())
     links: list[str] = []
     try:
         for page_url in iter_page_urls(url, page_count):
-            response = session.get(page_url, timeout=timeout)
+            response = request_with_retries(session, "GET", page_url, timeout=timeout, retries=retries)
             response.encoding = "utf-8"
             response.raise_for_status()
             links.extend(extract_wallpaper_links(response.text))
@@ -155,7 +171,8 @@ def download_image(
     output_dir: str | Path,
     headers: dict[str, str] | None = None,
     overwrite: bool = False,
-    timeout: float = 30,
+    timeout: float = DEFAULT_DOWNLOAD_TIMEOUT,
+    retries: int = DEFAULT_RETRIES,
 ) -> DownloadResult:
     target_dir = Path(output_dir)
     target_dir.mkdir(parents=True, exist_ok=True)
@@ -166,7 +183,14 @@ def download_image(
         return DownloadResult(wallpaper_id, url, target_path, skipped=True)
 
     try:
-        response = requests.get(url, headers=headers or build_headers(), timeout=timeout)
+        response = request_with_retries(
+            requests,
+            "GET",
+            url,
+            headers=headers or build_headers(),
+            timeout=timeout,
+            retries=retries,
+        )
         response.raise_for_status()
         target_path.write_bytes(response.content)
     except Exception as exc:
@@ -181,6 +205,7 @@ def download_wallpapers(
     output_dir: str | Path,
     max_workers: int = 8,
     overwrite: bool = False,
+    progress_callback: ProgressCallback | None = None,
 ) -> list[DownloadResult]:
     headers = build_headers()
     links = fetch_wallpaper_links(url, page_count, headers=headers)
@@ -201,7 +226,10 @@ def download_wallpapers(
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         futures = [executor.submit(download_one, link) for link in links]
         for future in as_completed(futures):
-            results.append(future.result())
+            result = future.result()
+            results.append(result)
+            if progress_callback is not None:
+                progress_callback(result)
     return results
 
 
@@ -214,6 +242,7 @@ def download_from_search(
     start_page: int = 1,
     page_count: int = 1,
     max_workers: int = 8,
+    progress_callback: ProgressCallback | None = None,
 ) -> list[DownloadResult]:
     url = build_search_url(
         sorting=sorting,
@@ -222,7 +251,39 @@ def download_from_search(
         categories=categories,
         start_page=start_page,
     )
-    return download_wallpapers(url, page_count, output_dir, max_workers=max_workers)
+    return download_wallpapers(
+        url,
+        page_count,
+        output_dir,
+        max_workers=max_workers,
+        progress_callback=progress_callback,
+    )
+
+
+def request_with_retries(
+    client,
+    method: str,
+    url: str,
+    retries: int = DEFAULT_RETRIES,
+    retry_delay: float = 0.5,
+    **kwargs,
+) -> requests.Response:
+    last_error: requests.RequestException | None = None
+    for attempt in range(retries + 1):
+        try:
+            response = client.request(method, url, **kwargs)
+            if response.status_code not in RETRY_STATUS_CODES or attempt >= retries:
+                return response
+        except requests.RequestException as exc:
+            last_error = exc
+            if attempt >= retries:
+                raise
+
+        time.sleep(retry_delay * (attempt + 1))
+
+    if last_error is not None:
+        raise last_error
+    raise RuntimeError(f"Request failed after {retries + 1} attempts: {url}")
 
 
 def dedupe(values: Iterable[str]) -> list[str]:
@@ -233,4 +294,3 @@ def dedupe(values: Iterable[str]) -> list[str]:
             seen.add(value)
             result.append(value)
     return result
-

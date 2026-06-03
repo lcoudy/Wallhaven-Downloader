@@ -1,10 +1,15 @@
 import unittest
+from pathlib import Path
+from unittest.mock import Mock, patch
 
 from wallhaven_downloader.core import (
+    DownloadResult,
     build_search_url,
+    download_wallpapers,
     extract_wallpaper_links,
     image_url_for,
     iter_page_urls,
+    request_with_retries,
     wallpaper_id_from_url,
 )
 
@@ -62,6 +67,44 @@ class CoreTest(unittest.TestCase):
 
     def test_wallpaper_id_from_url(self):
         self.assertEqual(wallpaper_id_from_url("https://wallhaven.cc/w/abc123/"), "abc123")
+
+    def test_request_with_retries_retries_retryable_status(self):
+        first = Mock(status_code=500)
+        second = Mock(status_code=200)
+        client = Mock()
+        client.request.side_effect = [first, second]
+
+        with patch("wallhaven_downloader.core.time.sleep"):
+            response = request_with_retries(client, "GET", "https://example.test", retries=1)
+
+        self.assertIs(response, second)
+        self.assertEqual(client.request.call_count, 2)
+
+    def test_download_wallpapers_reports_progress(self):
+        progress = []
+
+        with (
+            patch("wallhaven_downloader.core.fetch_wallpaper_links", return_value=["https://wallhaven.cc/w/abc123"]),
+            patch("wallhaven_downloader.core.resolve_image_url", return_value="https://w.wallhaven.cc/full/ab/wallhaven-abc123.jpg"),
+            patch(
+                "wallhaven_downloader.core.download_image",
+                return_value=DownloadResult(
+                    wallpaper_id="abc123",
+                    url="https://w.wallhaven.cc/full/ab/wallhaven-abc123.jpg",
+                    path=Path("abc123.jpg"),
+                ),
+            ),
+        ):
+            results = download_wallpapers(
+                "https://wallhaven.cc/hot",
+                1,
+                ".",
+                max_workers=1,
+                progress_callback=progress.append,
+            )
+
+        self.assertEqual(len(results), 1)
+        self.assertEqual(len(progress), 1)
 
 
 if __name__ == "__main__":

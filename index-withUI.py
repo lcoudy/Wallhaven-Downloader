@@ -1,87 +1,44 @@
-import os
 import sys
-import time
-import requests
 from PyQt5 import QtCore, QtGui, QtWidgets
-import threading
 from PyQt5.QtWidgets import QMessageBox, QFileDialog
-from bs4 import BeautifulSoup
 
-headers = {
-    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/81.0.4389.90 Safari/531.36'
-}
+from wallhaven_downloader.core import build_search_url, download_wallpapers
 
-wallhaven_cookie = os.getenv('WALLHAVEN_COOKIE')
-if wallhaven_cookie:
-    headers['Cookie'] = wallhaven_cookie
-cent = 0
 
-class eachPageThread(threading.Thread):
-    def __init__(self, url, file_name, form):
-        threading.Thread.__init__(self)
-        self.form = form
-        self.eachPageUrl = url
-        self.file_path = file_name
+class DownloadWorker(QtCore.QThread):
+    progress = QtCore.pyqtSignal(int, int, int)
+    finished = QtCore.pyqtSignal(int, int, int)
+    failed = QtCore.pyqtSignal(str)
+
+    def __init__(self, url, page_count, output_dir):
+        super().__init__()
+        self.url = url
+        self.page_count = int(page_count)
+        self.output_dir = output_dir
+        self.downloaded = 0
+        self.skipped = 0
+        self.errors = 0
 
     def run(self):
         try:
-            eachPageCollection = []
-            content = open_url(self.eachPageUrl)
-            soup = BeautifulSoup(content, 'lxml')
-            images = soup.find('section', class_="thumb-listing-page")
-            for li in images.find_all('li'):
-                string = str(li.a['href'])
-                eachPageCollection.append(string)
+            download_wallpapers(
+                self.url,
+                self.page_count,
+                self.output_dir,
+                progress_callback=self.on_progress,
+            )
+            self.finished.emit(self.downloaded, self.skipped, self.errors)
+        except Exception as exc:
+            self.failed.emit(str(exc))
 
-            threadingSet = []
-            for eachImage in eachPageCollection:
-                name = eachImage.split('/')[-1]
-                eachImageUrl = 'https://w.wallhaven.cc/full/%s/wallhaven-%s.jpg' % (name[0:2], name)
-                html = requests.head(eachImageUrl)
-                res = html.status_code
-                ImagePosixFlag = 0
-                if res == 404:
-                    eachImageUrl = eachImageUrl[0:-3] + 'png'
-                    ImagePosixFlag = 1
-
-                t = threading.Thread(target=downloadEachImage, args=(eachImageUrl, name, self.file_path, ImagePosixFlag))
-                threadingSet.append(t)
-                t.start()
-
-                ui.set_down_nums('已经下载 ' + str(cent) + ' 张')
-
-            for eachThread in threadingSet:
-                eachThread.join()
-        except:
-            return
-
-    def get_enumerate(self):
-        return threading.enumerate()
-
-
-def downloadEachImage(url, name, file_path, flag):
-    global cent
-    fix_file_name = '%s/%s.jpg' % (file_path, name)
-    if flag == 1:
-        fix_file_name = '%s/%s.png' % (file_path, name)
-
-    if not os.path.exists(fix_file_name):
-        print("正在下载 %s" % fix_file_name)
-        with open(fix_file_name, 'wb') as f:
-            img = requests.get(url, headers=headers).content
-            f.write(img)
-        semalock.acquire()
-        cent += 1
-        semalock.release()
-    else:
-        print("发现%s存在，未下载" % fix_file_name)
-
-
-def open_url(url):
-    response = requests.get(url, headers=headers)
-    response.encoding = 'utf-8'
-    html = response.text
-    return html
+    def on_progress(self, result):
+        if result.error is not None:
+            self.errors += 1
+        elif result.skipped:
+            self.skipped += 1
+        else:
+            self.downloaded += 1
+        self.progress.emit(self.downloaded, self.skipped, self.errors)
 
 
 class Ui_Form(object):
@@ -112,7 +69,7 @@ class Ui_Form(object):
         self.Button_choose_file.setGeometry(QtCore.QRect(320, 240, 121, 61))
         self.Button_choose_file.setFont(font)
         self.Button_choose_file.setObjectName("Button_choose_file")
-        self.Button_choose_file.clicked.connect(lambda: self.thread_it(self.get_filename(Form)))
+        self.Button_choose_file.clicked.connect(lambda: self.get_filename(Form))
 
         # 按条件下载
         self.Button_condition_start = QtWidgets.QPushButton(Form)
@@ -299,47 +256,33 @@ class Ui_Form(object):
         else:
             self.mesb.about(form, '对不起！', '选择失败  ')
 
-    def testIsFinish(self,theThread,form):
-        while True:
-            if len(theThread[0].get_enumerate()) == 2:
-                break
-            # print('当前运行线程：', len(theThread[0].get_enumerate()))
-            time.sleep(1)
-        print("全部下载完成")
-        ui.Button_condition_start.setEnabled(True)
-        ui.Button_start.setEnabled(True)
-        ui.Button_choose_file.setEnabled(True)
-
-    def thread_it(self, func, *args):
-        t = threading.Thread(target=func, args=args)
-        t.setDaemon(True)
-        t.start()
-
     def downLoad(self,url,num,file_path,form):
-        start = int(url[-1])
-        allPagesUrl = [url]
-        if int(num) >= 2:
-            for i in range(start + 1, int(num) + start):
-                allPagesUrl.append(url[0:-1] + str(i))
+        self.set_download_controls_enabled(False)
+        self.set_down_nums('已经下载 0 张，跳过 0 张，失败 0 张')
+        self.worker = DownloadWorker(url, num, file_path)
+        self.worker.progress.connect(self.on_download_progress)
+        self.worker.finished.connect(lambda downloaded, skipped, failed: self.on_download_finished(form, downloaded, skipped, failed))
+        self.worker.failed.connect(lambda message: self.on_download_failed(form, message))
+        self.worker.start()
+        self.mesb.about(form, '提示', '开始下载，稍等片刻')
 
-        eachPageThreadSet=[]
-        for eachPageUrl in allPagesUrl:
-            t = eachPageThread(eachPageUrl, file_path, form)
-            eachPageThreadSet.append(t)
-            t.setDaemon(True)
-            t.start()
+    def set_download_controls_enabled(self, enabled):
+        self.Button_condition_start.setEnabled(enabled)
+        self.Button_start.setEnabled(enabled)
+        self.Button_choose_file.setEnabled(enabled)
 
-        # 守望线程，判断是否全部下载完成
-        args = [eachPageThreadSet, form]
-        t2 = threading.Thread(target=self.testIsFinish, args=args)
-        t2.setDaemon(True)
-        t2.start()
+    def on_download_progress(self, downloaded, skipped, failed):
+        self.set_down_nums(f'已经下载 {downloaded} 张，跳过 {skipped} 张，失败 {failed} 张')
 
-        ui.Button_condition_start.setEnabled(False)
-        ui.Button_start.setEnabled(False)
-        ui.Button_choose_file.setEnabled(False)
+    def on_download_finished(self, form, downloaded, skipped, failed):
+        self.set_download_controls_enabled(True)
+        self.set_down_nums(f'下载完成：成功 {downloaded} 张，跳过 {skipped} 张，失败 {failed} 张')
+        self.mesb.about(form, '提示', f'下载完成：成功 {downloaded} 张，跳过 {skipped} 张，失败 {failed} 张')
 
-        ui.mesb.about(form, '对不起！', '开始下载 稍等片刻~~~')
+    def on_download_failed(self, form, message):
+        self.set_download_controls_enabled(True)
+        self.set_down_nums('下载失败')
+        self.mesb.about(form, '错误', '下载失败：' + message)
 
 
 
@@ -347,11 +290,9 @@ class Ui_Form(object):
         if self.file != '':
             if self.Page_input.text() != '':
                 try:
-                    global cent
-                    cent -= cent
                     self.downLoad(self.Page_input.text(), self.spinBox_nums_common.text(), self.file, form)
-                except():
-                    self.mesb.about(form, '对不起！', '出错,重启后再下载')
+                except Exception as exc:
+                    self.mesb.about(form, '错误', '出错：' + str(exc))
             else:
                 self.mesb.about(form, '对不起！', '先输入指定页面再开始')
         else:
@@ -412,7 +353,7 @@ class Ui_Form(object):
 
     def updata_sorting(self):
         choice_time = self.comboBox_condition.currentText()
-        if choice_time == 'Top榜单的':
+        if choice_time == 'Top榜单':
             self.sorting = 'toplist'
         elif choice_time == '收藏榜单':
             self.sorting = 'favorites'
@@ -426,10 +367,13 @@ class Ui_Form(object):
     def condition_down(self, form):
         if self.file != '':
             try:
-                global cent
-                cent -= cent
-                fixed_url = 'https://wallhaven.cc/' + 'search?categories=' + self.categories + '&purity=' + self.purity + '&topRange=' + \
-                            self.topRange + '&sorting=' + self.sorting + '&order=desc' + '&page=' + self.spinBox_start_num.text()  # +self.purity
+                fixed_url = build_search_url(
+                    sorting=self.sorting,
+                    top_range=self.topRange,
+                    purity=self.purity,
+                    categories=self.categories,
+                    start_page=int(self.spinBox_start_num.text()),
+                )
                 if int(self.spinBox_nums_end.text()) - int(self.spinBox_start_num.text()) < 0:
                     num = 1
                 else:
@@ -438,15 +382,13 @@ class Ui_Form(object):
                     self.mesb.about(form, '对不起！', '一次性最多下载20页，过多容易导致程序异常')
                 else:
                     self.downLoad(fixed_url,num,self.file,form)
-            except():
-                self.mesb.about(form, '对不起！', '出错,重启后再下载')
+            except Exception as exc:
+                self.mesb.about(form, '错误', '出错：' + str(exc))
         else:
             self.mesb.about(form, '对不起！', '先选择路径')
 
 
 if __name__ == '__main__':
-    lock = threading.Lock()
-    semalock=threading.Semaphore(1)
     app = QtWidgets.QApplication(sys.argv)
     MainWindow = QtWidgets.QMainWindow()
     ui = Ui_Form()
