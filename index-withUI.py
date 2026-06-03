@@ -7,6 +7,7 @@ from wallhaven_downloader.core import build_search_url, download_wallpapers
 
 
 class DownloadWorker(QtCore.QThread):
+    status = QtCore.pyqtSignal(str)
     progress = QtCore.pyqtSignal(int, int, int)
     finished = QtCore.pyqtSignal(int, int, int)
     failed = QtCore.pyqtSignal(str)
@@ -27,6 +28,7 @@ class DownloadWorker(QtCore.QThread):
                 self.page_count,
                 self.output_dir,
                 progress_callback=self.on_progress,
+                page_progress_callback=self.on_page_progress,
             )
             downloaded = sum(1 for item in results if not item.skipped and item.error is None)
             skipped = sum(1 for item in results if item.skipped)
@@ -43,6 +45,9 @@ class DownloadWorker(QtCore.QThread):
         else:
             self.downloaded += 1
         self.progress.emit(self.downloaded, self.skipped, self.errors)
+
+    def on_page_progress(self, page_number, page_count, page_links, total_links):
+        self.status.emit(f"正在解析页面 {page_number}/{page_count}，本页 {page_links} 张，累计 {total_links} 张")
 
 
 class Ui_Form(object):
@@ -234,6 +239,7 @@ class Ui_Form(object):
         self.set_download_controls_enabled(False)
         self.progress_label.setText("已经下载 0 张，跳过 0 张，失败 0 张")
         self.worker = DownloadWorker(url, self.page_count_spin.value(), self.file)
+        self.worker.status.connect(self.on_download_status)
         self.worker.progress.connect(self.on_download_progress)
         self.worker.finished.connect(self.on_download_finished)
         self.worker.failed.connect(self.on_download_failed)
@@ -244,6 +250,9 @@ class Ui_Form(object):
         self.choose_button.setEnabled(enabled)
         self.start_button.setEnabled(enabled)
         self.folder_name_input.setEnabled(enabled)
+
+    def on_download_status(self, message):
+        self.progress_label.setText(message)
 
     def on_download_progress(self, downloaded, skipped, failed):
         self.progress_label.setText(f"已经下载 {downloaded} 张，跳过 {skipped} 张，失败 {failed} 张")

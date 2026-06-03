@@ -55,6 +55,35 @@ class CoreTest(unittest.TestCase):
             ["https://wallhaven.cc/w/abc123", "https://wallhaven.cc/w/def456"],
         )
 
+    def test_fetch_wallpaper_links_reports_page_progress(self):
+        response = Mock()
+        response.text = """
+        <section class="thumb-listing-page">
+          <ul><li><a href="https://wallhaven.cc/w/abc123">one</a></li></ul>
+        </section>
+        """
+        response.raise_for_status = Mock()
+        progress = []
+
+        with (
+            patch("wallhaven_downloader.core.requests.Session") as session_factory,
+            patch("wallhaven_downloader.core.iter_page_urls", return_value=["https://wallhaven.cc/hot"]),
+        ):
+            session = session_factory.return_value
+            session.get.return_value = response
+            session.request.return_value = response
+
+            from wallhaven_downloader.core import fetch_wallpaper_links
+
+            links = fetch_wallpaper_links(
+                "https://wallhaven.cc/hot",
+                1,
+                page_progress_callback=lambda *args: progress.append(args),
+            )
+
+        self.assertEqual(links, ["https://wallhaven.cc/w/abc123"])
+        self.assertEqual(progress, [(1, 1, 1, 1)])
+
     def test_build_search_url(self):
         self.assertEqual(
             build_search_url("toplist", "1M", "110", "101", 4),

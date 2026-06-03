@@ -47,6 +47,7 @@ class DownloadResult:
 
 
 ProgressCallback = Callable[[DownloadResult], None]
+PageProgressCallback = Callable[[int, int, int, int], None]
 
 
 def build_headers() -> dict[str, str]:
@@ -153,16 +154,21 @@ def fetch_wallpaper_links(
     headers: dict[str, str] | None = None,
     timeout: float = DEFAULT_PAGE_TIMEOUT,
     retries: int = DEFAULT_RETRIES,
+    page_progress_callback: PageProgressCallback | None = None,
 ) -> list[str]:
     session = requests.Session()
     session.headers.update(headers or build_headers())
     links: list[str] = []
     try:
-        for page_url in iter_page_urls(url, page_count):
+        page_urls = iter_page_urls(url, page_count)
+        for page_number, page_url in enumerate(page_urls, start=1):
             response = request_with_retries(session, "GET", page_url, timeout=timeout, retries=retries)
             response.encoding = "utf-8"
             response.raise_for_status()
-            links.extend(extract_wallpaper_links(response.text))
+            page_links = extract_wallpaper_links(response.text)
+            links.extend(page_links)
+            if page_progress_callback is not None:
+                page_progress_callback(page_number, len(page_urls), len(page_links), len(dedupe(links)))
     finally:
         session.close()
     return dedupe(links)
@@ -209,11 +215,17 @@ def download_wallpapers(
     max_workers: int = DEFAULT_MAX_WORKERS,
     overwrite: bool = False,
     progress_callback: ProgressCallback | None = None,
+    page_progress_callback: PageProgressCallback | None = None,
     failed_retry_rounds: int = DEFAULT_FAILED_RETRY_ROUNDS,
     write_failure_report_file: bool = True,
 ) -> list[DownloadResult]:
     headers = build_headers()
-    links = fetch_wallpaper_links(url, page_count, headers=headers)
+    links = fetch_wallpaper_links(
+        url,
+        page_count,
+        headers=headers,
+        page_progress_callback=page_progress_callback,
+    )
     if not links:
         return []
 
@@ -271,6 +283,7 @@ def download_from_search(
     page_count: int = 1,
     max_workers: int = DEFAULT_MAX_WORKERS,
     progress_callback: ProgressCallback | None = None,
+    page_progress_callback: PageProgressCallback | None = None,
 ) -> list[DownloadResult]:
     url = build_search_url(
         sorting=sorting,
@@ -285,6 +298,7 @@ def download_from_search(
         output_dir,
         max_workers=max_workers,
         progress_callback=progress_callback,
+        page_progress_callback=page_progress_callback,
     )
 
 
