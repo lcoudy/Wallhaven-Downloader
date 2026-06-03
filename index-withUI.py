@@ -3,7 +3,7 @@ from pathlib import Path
 
 from PyQt5 import QtCore, QtWidgets
 
-from wallhaven_downloader.core import build_search_url, download_wallpapers
+from wallhaven_downloader.core import DEFAULT_MAX_WORKERS, build_search_url, download_wallpapers
 
 
 class DownloadWorker(QtCore.QThread):
@@ -12,11 +12,12 @@ class DownloadWorker(QtCore.QThread):
     finished = QtCore.pyqtSignal(int, int, int)
     failed = QtCore.pyqtSignal(str)
 
-    def __init__(self, url, page_count, output_dir):
+    def __init__(self, url, page_count, output_dir, max_workers):
         super().__init__()
         self.url = url
         self.page_count = int(page_count)
         self.output_dir = output_dir
+        self.max_workers = int(max_workers)
         self.downloaded = 0
         self.skipped = 0
         self.errors = 0
@@ -27,6 +28,7 @@ class DownloadWorker(QtCore.QThread):
                 self.url,
                 self.page_count,
                 self.output_dir,
+                max_workers=self.max_workers,
                 progress_callback=self.on_progress,
                 page_progress_callback=self.on_page_progress,
             )
@@ -134,6 +136,10 @@ class Ui_Form(object):
         self.page_count_spin.setRange(1, 9999)
         self.page_count_spin.setValue(20)
 
+        self.worker_spin = QtWidgets.QSpinBox(Form)
+        self.worker_spin.setRange(1, 16)
+        self.worker_spin.setValue(DEFAULT_MAX_WORKERS)
+
         self.progress_label = QtWidgets.QLabel("等待开始", Form)
         self.progress_label.setMinimumHeight(28)
 
@@ -176,6 +182,8 @@ class Ui_Form(object):
         filter_layout.addWidget(self.start_page_spin, 3, 1)
         filter_layout.addWidget(QtWidgets.QLabel("下载页数"), 3, 2)
         filter_layout.addWidget(self.page_count_spin, 3, 3)
+        filter_layout.addWidget(QtWidgets.QLabel("并发数"), 4, 0)
+        filter_layout.addWidget(self.worker_spin, 4, 1)
         root_layout.addWidget(filter_group)
 
         footer_layout = QtWidgets.QHBoxLayout()
@@ -238,7 +246,7 @@ class Ui_Form(object):
         )
         self.set_download_controls_enabled(False)
         self.progress_label.setText("已经下载 0 张，跳过 0 张，失败 0 张")
-        self.worker = DownloadWorker(url, self.page_count_spin.value(), self.file)
+        self.worker = DownloadWorker(url, self.page_count_spin.value(), self.file, self.worker_spin.value())
         self.worker.status.connect(self.on_download_status)
         self.worker.progress.connect(self.on_download_progress)
         self.worker.finished.connect(self.on_download_finished)
@@ -250,6 +258,7 @@ class Ui_Form(object):
         self.choose_button.setEnabled(enabled)
         self.start_button.setEnabled(enabled)
         self.folder_name_input.setEnabled(enabled)
+        self.worker_spin.setEnabled(enabled)
 
     def on_download_status(self, message):
         self.progress_label.setText(message)

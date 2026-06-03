@@ -32,7 +32,7 @@ DEFAULT_PAGE_TIMEOUT = 20
 DEFAULT_DOWNLOAD_TIMEOUT = 30
 DEFAULT_RETRIES = 6
 DEFAULT_RETRY_DELAY = 2.0
-DEFAULT_MAX_WORKERS = 2
+DEFAULT_MAX_WORKERS = 4
 DEFAULT_FAILED_RETRY_ROUNDS = 1
 RETRY_STATUS_CODES = {429, 500, 502, 503, 504}
 
@@ -231,12 +231,7 @@ def download_wallpapers(
 
     def download_one(link: str) -> DownloadResult:
         wallpaper_id = wallpaper_id_from_url(link)
-        session = requests.Session()
-        session.headers.update(headers)
-        try:
-            image_url = resolve_image_url(session, wallpaper_id)
-        finally:
-            session.close()
+        image_url = image_url_for(wallpaper_id, "jpg")
         result = download_image(image_url, wallpaper_id, output_dir, headers=headers, overwrite=overwrite)
         if result.error and "404" in result.error and image_url.endswith(".jpg"):
             png_url = image_url_for(wallpaper_id, "png")
