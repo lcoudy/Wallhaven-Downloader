@@ -59,13 +59,13 @@ uv run python -m unittest discover -s tests
 构建 Windows GUI 版本：
 
 ```powershell
-uv run pyinstaller --noconfirm --windowed --name Wallhaven-Downloader index-withUI.py
+uv run pyinstaller --noconfirm --windowed --onefile --name Wallhaven-Downloader index-withUI.py
 ```
 
 构建完成后双击运行：
 
 ```text
-dist\Wallhaven-Downloader\Wallhaven-Downloader.exe
+dist\Wallhaven-Downloader.exe
 ```
 
 如需访问需要登录状态的 Wallhaven 内容，可通过环境变量提供 Cookie：
