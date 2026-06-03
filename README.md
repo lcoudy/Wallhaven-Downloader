@@ -25,6 +25,25 @@
 
 **先选择文件夹 ！**
 
+### 使用 uv 运行
+
+```powershell
+uv sync
+uv run python index-withUI.py
+```
+
+无界面版本暂时保留为下载逻辑测试入口：
+
+```powershell
+uv run python index-withoutUI.py
+```
+
+如需访问需要登录状态的 Wallhaven 内容，可通过环境变量提供 Cookie：
+
+```powershell
+$env:WALLHAVEN_COOKIE="your-cookie"
+```
+
 - 可以**复制一个网址**，从指定网址（可以是搜索结果页面，或标签页面）下载几页的内容
 
 如复制网址：https://wallhaven.cc/hot 并选择下载**3**页 ，点“**开始从此页面下载**”即可
@@ -59,4 +78,11 @@
 
 * 上传到阿里云版本，名称为 upload version
 * 功能：直接将壁纸下载到**阿里云的OSS**中，满足一些特定场景下需求
-* 需要手动修改代码中“**阿里云账号与密码**”以及**路径**
+* 需要通过环境变量配置阿里云 OSS：
+
+```powershell
+$env:ALIYUN_ACCESS_KEY_ID="your-access-key-id"
+$env:ALIYUN_ACCESS_KEY_SECRET="your-access-key-secret"
+$env:ALIYUN_OSS_BUCKET="your-bucket"
+$env:ALIYUN_OSS_ENDPOINT="http://oss-cn-beijing.aliyuncs.com"
+```
