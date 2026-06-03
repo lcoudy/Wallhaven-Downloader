@@ -101,7 +101,6 @@ class Ui_Form(object):
         self.sketchy_checkbox = QtWidgets.QCheckBox("Sketchy", Form)
         self.nsfw_checkbox = QtWidgets.QCheckBox("NSFW", Form)
         self.sfw_checkbox.setChecked(True)
-        self.sketchy_checkbox.setChecked(True)
 
         self.sorting_combo = QtWidgets.QComboBox(Form)
         self.sorting_combo.addItem("Top榜单", "toplist")
