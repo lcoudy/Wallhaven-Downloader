@@ -1,0 +1,2 @@
+"""Wallhaven downloader package."""
+

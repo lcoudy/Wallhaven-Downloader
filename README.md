@@ -38,6 +38,12 @@ uv run python index-withUI.py
 uv run python index-withoutUI.py
 ```
 
+运行核心逻辑测试：
+
+```powershell
+uv run python -m unittest discover -s tests
+```
+
 如需访问需要登录状态的 Wallhaven 内容，可通过环境变量提供 Cookie：
 
 ```powershell
