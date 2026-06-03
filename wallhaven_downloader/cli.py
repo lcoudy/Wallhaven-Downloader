@@ -3,7 +3,7 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from wallhaven_downloader.core import download_from_search, download_wallpapers
+from wallhaven_downloader.core import DEFAULT_MAX_WORKERS, download_from_search, download_wallpapers
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -39,7 +39,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("-o", "--output", type=Path, required=True, help="Download directory.")
     parser.add_argument("--url", help="Wallhaven listing URL. If omitted, search options are used.")
     parser.add_argument("--pages", type=int, default=1, help="Number of pages to download.")
-    parser.add_argument("--workers", type=int, default=8, help="Concurrent download workers.")
+    parser.add_argument("--workers", type=int, default=DEFAULT_MAX_WORKERS, help="Concurrent download workers.")
     parser.add_argument("--overwrite", action="store_true", help="Overwrite existing files.")
     parser.add_argument("--sorting", default="toplist", choices=["date_added", "toplist", "favorites", "views", "hot", "random"])
     parser.add_argument("--top-range", default="1M", choices=["1d", "1w", "1M", "3M", "6M", "1y"])

@@ -106,6 +106,26 @@ class CoreTest(unittest.TestCase):
         self.assertEqual(len(results), 1)
         self.assertEqual(len(progress), 1)
 
+    def test_download_wallpapers_falls_back_to_png_on_jpg_404(self):
+        jpg_url = "https://w.wallhaven.cc/full/ab/wallhaven-abc123.jpg"
+        png_url = "https://w.wallhaven.cc/full/ab/wallhaven-abc123.png"
+
+        with (
+            patch("wallhaven_downloader.core.fetch_wallpaper_links", return_value=["https://wallhaven.cc/w/abc123"]),
+            patch("wallhaven_downloader.core.resolve_image_url", return_value=jpg_url),
+            patch(
+                "wallhaven_downloader.core.download_image",
+                side_effect=[
+                    DownloadResult("abc123", jpg_url, Path("abc123.jpg"), error="404 Client Error"),
+                    DownloadResult("abc123", png_url, Path("abc123.png")),
+                ],
+            ) as download_image,
+        ):
+            results = download_wallpapers("https://wallhaven.cc/hot", 1, ".", max_workers=1)
+
+        self.assertEqual(results[0].url, png_url)
+        self.assertEqual(download_image.call_count, 2)
+
 
 if __name__ == "__main__":
     unittest.main()

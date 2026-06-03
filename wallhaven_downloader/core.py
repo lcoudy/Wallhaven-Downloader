@@ -30,7 +30,9 @@ DEFAULT_HEADERS = {
 
 DEFAULT_PAGE_TIMEOUT = 20
 DEFAULT_DOWNLOAD_TIMEOUT = 30
-DEFAULT_RETRIES = 2
+DEFAULT_RETRIES = 4
+DEFAULT_RETRY_DELAY = 2.0
+DEFAULT_MAX_WORKERS = 4
 RETRY_STATUS_CODES = {429, 500, 502, 503, 504}
 
 
@@ -203,7 +205,7 @@ def download_wallpapers(
     url: str,
     page_count: int,
     output_dir: str | Path,
-    max_workers: int = 8,
+    max_workers: int = DEFAULT_MAX_WORKERS,
     overwrite: bool = False,
     progress_callback: ProgressCallback | None = None,
 ) -> list[DownloadResult]:
@@ -220,7 +222,11 @@ def download_wallpapers(
             image_url = resolve_image_url(session, wallpaper_id)
         finally:
             session.close()
-        return download_image(image_url, wallpaper_id, output_dir, headers=headers, overwrite=overwrite)
+        result = download_image(image_url, wallpaper_id, output_dir, headers=headers, overwrite=overwrite)
+        if result.error and "404" in result.error and image_url.endswith(".jpg"):
+            png_url = image_url_for(wallpaper_id, "png")
+            return download_image(png_url, wallpaper_id, output_dir, headers=headers, overwrite=overwrite)
+        return result
 
     results: list[DownloadResult] = []
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
@@ -241,7 +247,7 @@ def download_from_search(
     categories: str = "110",
     start_page: int = 1,
     page_count: int = 1,
-    max_workers: int = 8,
+    max_workers: int = DEFAULT_MAX_WORKERS,
     progress_callback: ProgressCallback | None = None,
 ) -> list[DownloadResult]:
     url = build_search_url(
@@ -265,7 +271,7 @@ def request_with_retries(
     method: str,
     url: str,
     retries: int = DEFAULT_RETRIES,
-    retry_delay: float = 0.5,
+    retry_delay: float = DEFAULT_RETRY_DELAY,
     **kwargs,
 ) -> requests.Response:
     last_error: requests.RequestException | None = None
